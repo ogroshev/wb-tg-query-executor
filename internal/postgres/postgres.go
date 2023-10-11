@@ -35,6 +35,7 @@ func GetTaskList(db *sql.DB) ([]Task, error) {
 			preformatted,
 			add_header
 		FROM tg_query_executor
+		WHERE enable IS NULL OR enable = TRUE
 	`
 	rows, err := db.Query(q)
 	if err != nil {
