@@ -1,11 +1,25 @@
-FROM golang:1.19
+FROM golang:alpine AS builder
 
-WORKDIR /usr/src/app
+LABEL stage=gobuilder
 
-COPY go.mod go.sum ./
-RUN go mod download && go mod verify
+ENV CGO_ENABLED 0
 
+WORKDIR /build
+
+ADD go.mod .
+ADD go.sum .
+RUN go mod download
 COPY . .
-RUN cd cmd; go build -v -o /usr/local/bin/app .
+RUN go build -ldflags="-s -w" -o /app/wb-tg-query-executor cmd/main.go
 
-CMD ["app"]
+
+FROM alpine
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN apk update --no-cache && apk add --no-cache tzdata
+ENV TZ Europe/Moscow
+
+WORKDIR /app
+COPY --from=builder /app/wb-tg-query-executor /app/wb-tg-query-executor
+
+CMD ["./wb-tg-query-executor"]
