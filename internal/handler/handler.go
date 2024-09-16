@@ -63,7 +63,7 @@ func handleTask(db *sql.DB, task postgres.Task) bool {
 		log.Printf("chat_id: %v sending message...\n", task.ChatId)
 		err := telegram.SendMessage(task.BotToken, task.ChatId, msg)
 		if err != nil {
-			log.Printf("chat_id: %v error: \n", err)
+			log.Printf("chat_id: %d error: %v \n", task.ChatId, err)
 			return false
 		}
 		log.Printf("chat_id: %v sending message... OK\n", task.ChatId)
