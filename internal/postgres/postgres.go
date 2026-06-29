@@ -34,8 +34,8 @@ func GetTaskList(db *sql.DB) ([]Task, error) {
 			last_execution_ts,
 			preformatted,
 			add_header
-		FROM tg_query_executor
-		WHERE enable IS NULL OR enable = TRUE
+		FROM executors.tg
+		WHERE id = 43
 	`
 	rows, err := db.Query(q)
 	if err != nil {
@@ -67,7 +67,7 @@ func GetTaskList(db *sql.DB) ([]Task, error) {
 
 func UpdateLastExecutionTs(db *sql.DB, t Task) error {
 	q := `
-		UPDATE tg_query_executor
+		UPDATE executors.tg
 		SET last_execution_ts = $2
 		WHERE id = $1
 	`
