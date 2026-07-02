@@ -35,7 +35,7 @@ func GetTaskList(db *sql.DB) ([]Task, error) {
 			preformatted,
 			add_header
 		FROM executors.tg
-		WHERE id = 43
+		WHERE enable = true
 	`
 	rows, err := db.Query(q)
 	if err != nil {
