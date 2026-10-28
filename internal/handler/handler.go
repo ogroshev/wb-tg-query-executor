@@ -70,7 +70,13 @@ func isItTimeToWork(id uint64, cronStr string, lastExecTs sql.NullTime) bool {
 	return time.Now().After(nextTime)
 }
 
+// RunTask executes a task once and sends the result (cmd/preview).
+func RunTask(db *sql.DB, task postgres.Task) bool { return handleTask(db, task) }
+
 func handleTask(db *sql.DB, task postgres.Task) bool {
+	if task.Settings.Format == FormatTable || task.Settings.Format == FormatHTML {
+		return handleRichTask(db, task)
+	}
 	log.Printf("Executing query...\n")
 	resultNotEmpty, resultPretty, err := postgres.ExecQuery(db, task.SqlQuery)
 	if err != nil {
@@ -180,4 +186,46 @@ func makeMessages(desc string, queryRes string, preformatted bool, addHeader boo
 	}
 	flush()
 	return msgs
+}
+
+// handleRichTask sends the result via sendRichMessage. If Telegram rejects the rich message
+// (bad HTML from the query, limits), the same result goes out the legacy <pre> way so the alert is not lost.
+func handleRichTask(db *sql.DB, task postgres.Task) bool {
+	log.Printf("Executing query (format %s)...\n", task.Settings.Format)
+	res, err := postgres.QueryResult(db, task.SqlQuery)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	log.Printf("Executing query... OK (%s)\n", describeResult(res))
+	if len(res.Rows) == 0 {
+		log.Printf("Empty resultset. Skip message")
+		return true
+	}
+	msgs := makeRichMessages(task.Settings.Format, task.ChatDescribe, task.Settings.AddHeader, task.Settings.Header, task.Settings.Footer, res)
+	for i, msg := range msgs {
+		log.Printf("chat_id: %v sending rich message %d/%d (%d chars)...\n", task.ChatId, i+1, len(msgs), len([]rune(msg)))
+		err := telegram.SendRichMessage(task.BotToken, task.ChatId, msg)
+		if err == nil {
+			continue
+		}
+		log.Printf("chat_id: %d rich error: %v, falling back to <pre>\n", task.ChatId, err)
+		if i > 0 {
+			return false // part of the result is already sent; retry would duplicate it, plain fallback would too
+		}
+		_, pretty, err := postgres.ExecQuery(db, task.SqlQuery)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+		for _, m := range makeMessages(task.ChatDescribe, pretty, true, task.Settings.AddHeader) {
+			if err := telegram.SendMessage(task.BotToken, task.ChatId, m); err != nil {
+				log.Printf("chat_id: %d error: %v \n", task.ChatId, err)
+				return false
+			}
+		}
+		return true
+	}
+	log.Printf("chat_id: %v sending message... OK\n", task.ChatId)
+	return true
 }
